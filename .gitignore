@@ -1,0 +1,10 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# Finder (MacOS) folder config
+.DS_Store
