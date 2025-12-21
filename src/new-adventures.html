@@ -1,0 +1,26 @@
+<!doctype html>
+<html class="no-js" lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>New Adventures in JavaScript</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script defer src="new-adventures.js"></script>
+  </head>
+  <body>
+    <form class="add-todo">
+      <label for="todo-heading">Todo</label>
+      <input type="text" id="todo-heading" />
+      <label for="todo-state">Todo State</label>
+      <select type="select" id="todo-state">
+        <option selected value="">--</option>
+        <option value="TODO">To do</option>
+        <option value="IN_PROGRESS">In progress</option>
+        <option value="DONE">Done</option>
+      </select>
+      <label for="todo-preamble">Todo Preamble</label>
+      <textarea id="todo-preamble"></textarea>
+      <input type="submit" value="Add todo" />
+    </form>
+    <div class="todos"></div>
+  </body>
+</html>
