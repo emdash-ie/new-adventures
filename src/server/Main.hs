@@ -23,6 +23,7 @@ import Network.Wai.Handler.Warp (run)
 import Servant
 import System.Directory (listDirectory)
 import System.Environment (getArgs)
+import System.FilePath ((</>))
 
 main :: IO ()
 main = do
@@ -30,7 +31,7 @@ main = do
   filePaths <- listDirectory dir
   let orgFilePaths = filter (isSuffixOf ".org") filePaths
   orgFiles <- fmap (Map.fromList . catMaybes) $ for orgFilePaths \f -> do
-    bs <- readFile f
+    bs <- readFile (dir </> f)
     return (fmap (Text.pack f,) (org (decodeUtf8 bs)))
   run 8014 (app orgFiles)
 
