@@ -45,9 +45,6 @@ todoAPI = Proxy
 app :: Map Text OrgFile -> Application
 app = serve todoAPI . server
 
-exampleTodos :: Map Text OrgFile
-exampleTodos = Map.singleton "test.org" (OrgFile Map.empty (OrgDoc [Paragraph (Plain "hello" :| [])] []))
-
 instance ToJSON OrgFile
 instance ToJSON OrgDoc
 instance ToJSON Section
