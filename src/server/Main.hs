@@ -29,18 +29,18 @@ import System.FilePath ((</>))
 
 main :: IO ()
 main = do
-  command : arg : _ <- getArgs
+  command : args <- getArgs
   case command of
     "serve-todos" -> do
-      let dir = arg
+      let dir : staticPath : _ = args
       filePaths <- listDirectory dir
       let orgFilePaths = filter (isSuffixOf ".org") filePaths
       orgFiles <- fmap (Map.fromList . catMaybes) $ for orgFilePaths \f -> do
         bs <- readFile (dir </> f)
         return (fmap (Text.pack f,) (org (decodeUtf8 bs)))
-      run 8014 (app orgFiles)
+      run 8014 (app orgFiles staticPath)
     "generate-api-javascript" -> do
-      let targetFile = arg
+      let targetFile : _ = args
       Text.writeFile targetFile apiJavascript
     c -> do
       putStrLn ("Unrecognised command: " <> c)
@@ -51,8 +51,8 @@ type API = ToDoAPI :<|> Raw
 todoServer :: Map Text OrgFile -> Server ToDoAPI
 todoServer = return
 
-server :: Map Text OrgFile -> Server API
-server files = todoServer files :<|> serveDirectoryFileServer "src/client"
+server :: Map Text OrgFile -> FilePath -> Server API
+server files staticPath = todoServer files :<|> serveDirectoryFileServer staticPath
 
 todoAPI :: Proxy ToDoAPI
 todoAPI = Proxy
@@ -60,8 +60,8 @@ todoAPI = Proxy
 api :: Proxy API
 api = Proxy
 
-app :: Map Text OrgFile -> Application
-app files = serve api (server files)
+app :: Map Text OrgFile -> FilePath -> Application
+app files staticPath = serve api (server files staticPath)
 
 apiJavascript :: Text
 apiJavascript = jsForAPI todoAPI vanillaJS

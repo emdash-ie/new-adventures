@@ -3,7 +3,7 @@ import type { OrgFile, OrgTree, OrgTodo, Todos } from "./org-to-do";
 declare function getTodos(onSuccess: (todos: Todos) => void, onError: (e: Error) => void): void;
 
 console.log("Opening new-adventures DB…");
-const request: IDBOpenDBRequest = window.indexedDB.open("new-adventures", 3);
+const request: IDBOpenDBRequest = window.indexedDB.open("new-adventures", 4);
 
 request.onerror = (event) => {
   console.log("Got an error!", event);
@@ -30,7 +30,7 @@ function appLogic(database: IDBDatabase) {
   getTodos(
     todos => {
       console.log("Fetched todos");
-      database.transaction("todos", "readwrite").objectStore("todos").add(todos);
+      database.transaction("todos", "readwrite").objectStore("todos").add(todos, 1);
       displayToDos(database);
     },
     error => console.log("Error fetching to-dos:", error)
