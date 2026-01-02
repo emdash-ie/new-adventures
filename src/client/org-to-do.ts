@@ -21,6 +21,20 @@ export type OrgMeta = {
 }
 
 export type OrgDoc = {
-  docBlocks: object;
-  docSections: object;
+  docBlocks: Block[];
+  docSections: Section[];
 }
+
+export type Section = {
+  sectionTodo: Todo | null;
+  sectionHeading: Words[];
+  sectionDoc: OrgDoc;
+}
+
+export type Words =
+  { tag: "Plain", contents: string }
+  | any;
+
+export type Block = object;
+
+export type Todo = "TODO" | "DONE";

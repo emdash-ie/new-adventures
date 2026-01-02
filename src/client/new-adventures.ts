@@ -1,4 +1,4 @@
-import type { OrgFile, OrgTree, OrgTodo, Todos } from "./org-to-do";
+import type { OrgFile, OrgTree, OrgTodo, Todos, Section, Words, Block } from "./org-to-do";
 
 declare function getTodos(onSuccess: (todos: Todos) => void, onError: (e: Error) => void): void;
 
@@ -95,6 +95,47 @@ function showTodos(todos: Todos): HTMLDivElement {
     let p = document.createElement("p");
     p.replaceChildren(`Org file at ${filename} with title ${todos[filename]?.orgMeta.title}`);
     div.appendChild(p);
+    let subDiv = document.createElement("div");
+    subDiv.replaceChildren(
+      ...(todos[filename]?.orgDoc.docSections.map(s => showSection(s)) ?? [])
+    );
+    div.appendChild(subDiv);
   }
   return div;
+}
+
+function showSection(s: Section): HTMLDetailsElement {
+  let details = document.createElement("details");
+  let summary = document.createElement("summary");
+  summary.replaceChildren(
+    s.sectionTodo == null ? "" : `${s.sectionTodo} `,
+    showWords(s.sectionHeading)
+  )
+  details.replaceChildren(
+    summary,
+    showBlocks(s.sectionDoc.docBlocks),
+    ...s.sectionDoc.docSections.map(c => showSection(c))
+  );
+  return details;
+}
+
+function showWords(ws: Words[]): HTMLSpanElement {
+  let span = document.createElement("span");
+  span.replaceChildren(
+    ...ws.map(w => {
+      switch (w.tag) {
+        case "Plain":
+          return `${w.contents} `;
+        default:
+          return `(Words with tag ${w.tag})`
+      }
+    })
+  )
+  return span;
+}
+
+function showBlocks(bs: Block[]): HTMLParagraphElement {
+  let p = document.createElement("p");
+  p.replaceChildren(`(${bs.length} Block(s))`)
+  return p;
 }
