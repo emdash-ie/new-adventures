@@ -6,6 +6,8 @@
 module Main where
 
 import Prelude hiding (readFile)
+import Control.Monad (forever)
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (ToJSON(..), (.=), object)
 import Data.ByteString (readFile)
 import Data.List (isSuffixOf)
@@ -19,6 +21,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding (decodeUtf8)
 import Data.Text.IO qualified as Text
+import GHC.Conc
 import GHC.Generics
 import Network.Wai.Handler.Warp (run)
 import Servant
@@ -33,11 +36,8 @@ main = do
   case command of
     "serve-todos" -> do
       let dir : staticPath : _ = args
-      filePaths <- listDirectory dir
-      let orgFilePaths = filter (isSuffixOf ".org") filePaths
-      orgFiles <- fmap (Map.fromList . catMaybes) $ for orgFilePaths \f -> do
-        bs <- readFile (dir </> f)
-        return (fmap (Text.pack f,) (org (decodeUtf8 bs)))
+      orgFiles <- newTVarIO Map.empty
+      _pollerThreadId <- pollFromDisk dir orgFiles
       run 8014 (app orgFiles staticPath)
     "generate-api-javascript" -> do
       let targetFile : _ = args
@@ -48,10 +48,11 @@ main = do
 type ToDoAPI = "todos" :> Get '[JSON] (Map Text OrgFile)
 type API = ToDoAPI :<|> Raw
 
-todoServer :: Map Text OrgFile -> Server ToDoAPI
-todoServer = return
+todoServer :: TVar (Map Text OrgFile) -> Server ToDoAPI
+todoServer orgFiles = do
+  liftIO (atomically (readTVar orgFiles))
 
-server :: Map Text OrgFile -> FilePath -> Server API
+server :: TVar (Map Text OrgFile) -> FilePath -> Server API
 server files staticPath = todoServer files :<|> serveDirectoryFileServer staticPath
 
 todoAPI :: Proxy ToDoAPI
@@ -60,8 +61,22 @@ todoAPI = Proxy
 api :: Proxy API
 api = Proxy
 
-app :: Map Text OrgFile -> FilePath -> Application
+app :: TVar (Map Text OrgFile) -> FilePath -> Application
 app files staticPath = serve api (server files staticPath)
+
+pollFromDisk :: FilePath -> TVar (Map Text OrgFile) -> IO ThreadId
+pollFromDisk dir orgFiles = forkIO $ forever $ do
+  fs <- readFilesFromDisk dir
+  _ <- atomically (writeTVar orgFiles fs)
+  threadDelay 10_000_000
+
+readFilesFromDisk :: FilePath -> IO (Map Text OrgFile)
+readFilesFromDisk dir = do
+  filePaths <- listDirectory dir
+  let orgFilePaths = filter (isSuffixOf ".org") filePaths
+  fmap (Map.fromList . catMaybes) $ for orgFilePaths \f -> do
+    bs <- readFile (dir </> f)
+    return (fmap (Text.pack f,) (org (decodeUtf8 bs)))
 
 apiJavascript :: Text
 apiJavascript = jsForAPI todoAPI vanillaJS
