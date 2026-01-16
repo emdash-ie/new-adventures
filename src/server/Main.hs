@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 module Main where
@@ -8,7 +9,7 @@ module Main where
 import Prelude hiding (readFile)
 import Control.Monad (forever)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (ToJSON(..), (.=), object)
+import Data.Aeson (FromJSON(..), ToJSON(..), (.=), object)
 import Data.ByteString (readFile)
 import Data.List (isSuffixOf)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -45,12 +46,44 @@ main = do
     c -> do
       putStrLn ("Unrecognised command: " <> c)
 
-type ToDoAPI = "todos" :> Get '[JSON] (Map Text OrgFile)
+type ToDoAPI = "todos" :> (
+    Get '[JSON] (Map Text OrgFile)
+    :<|> ("add" :> ReqBody '[JSON] NewTodo :> Post '[JSON] ())
+  )
 type API = ToDoAPI :<|> Raw
 
 todoServer :: TVar (Map Text OrgFile) -> Server ToDoAPI
-todoServer orgFiles = do
+todoServer orgFiles =
+  readTodos orgFiles
+  :<|> addTodo orgFiles
+
+readTodos :: TVar (Map Text OrgFile) -> Handler (Map Text OrgFile)
+readTodos orgFiles = do
   liftIO (atomically (readTVar orgFiles))
+
+data NewTodo = NewTodo
+  { contents :: Section
+  , file :: Text
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON NewTodo
+instance ToJSON NewTodo
+
+addTodo :: TVar (Map Text OrgFile) -> NewTodo -> Handler ()
+addTodo orgFiles NewTodo{file, contents} = do
+  liftIO (atomically do
+    fs <- readTVar orgFiles
+    let update = \case
+          Nothing -> Just (OrgFile {
+                              orgMeta = Map.empty,
+                              orgDoc = OrgDoc {
+                                  docBlocks = [],
+                                  docSections = [contents]
+                                }
+                           })
+          Just OrgFile{orgMeta, orgDoc = OrgDoc{docBlocks, docSections}} ->
+            Just OrgFile{orgMeta, orgDoc = OrgDoc{docBlocks, docSections = docSections <> [contents]}}
+    writeTVar orgFiles (Map.alter update file fs))
 
 server :: TVar (Map Text OrgFile) -> FilePath -> Server API
 server files staticPath = todoServer files :<|> serveDirectoryFileServer staticPath
@@ -110,3 +143,24 @@ instance ToJSON RepeatMode
 deriving instance Generic DelayMode
 instance ToJSON DelayMode
 
+instance FromJSON OrgFile
+instance FromJSON OrgDoc
+instance FromJSON Section
+instance FromJSON OrgDateTime where
+instance FromJSON Block
+instance FromJSON Words
+instance FromJSON Language
+instance FromJSON URL
+instance FromJSON Priority
+instance FromJSON ListItems
+instance FromJSON Row
+instance FromJSON ListType
+instance FromJSON Item
+instance FromJSON Column
+instance FromJSON Todo
+instance FromJSON OrgTime where
+instance FromJSON Repeater where
+instance FromJSON Delay
+instance FromJSON Interval
+instance FromJSON RepeatMode
+instance FromJSON DelayMode
