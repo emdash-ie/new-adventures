@@ -26,9 +26,11 @@ export type OrgDoc = {
 }
 
 export type Section = {
-  sectionTodo: Todo | null;
+  sectionTodo: OrgTodo | null;
   sectionHeading: Words[];
   sectionDoc: OrgDoc;
+  sectionTags: any[];
+  sectionProps: object;
 }
 
 export type Words =
@@ -36,5 +38,3 @@ export type Words =
   | any;
 
 export type Block = object;
-
-export type Todo = "TODO" | "DONE";

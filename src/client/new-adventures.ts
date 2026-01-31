@@ -1,6 +1,12 @@
 import type { OrgFile, OrgTree, OrgTodo, Todos, Section, Words, Block } from "./org-to-do";
 
 declare function getTodos(onSuccess: (todos: Todos) => void, onError: (e: Error) => void): void;
+declare function postTodosAdd(body: NewTodo, onSuccess: () => void, onError: (e: Error) => void): void;
+
+type NewTodo = {
+  contents: Section,
+  file: string,
+}
 
 console.log("Opening new-adventures DB…");
 const request: IDBOpenDBRequest = window.indexedDB.open("new-adventures", 4);
@@ -39,19 +45,33 @@ function appLogic(database: IDBDatabase) {
     event.preventDefault();
     if (event.target != null) {
       const form: HTMLFormElement = event.target as HTMLFormElement;
+      const file = (form.querySelector("#todo-file") as HTMLInputElement).value;
       const heading = (form.querySelector("#todo-heading") as HTMLInputElement).value;
       const state: OrgTodo | "" = (form.querySelector("#todo-state") as HTMLSelectElement).value as (OrgTodo | "");
       const preamble = (form.querySelector("#todo-preamble") as HTMLTextAreaElement).value;
 
-      const todo: OrgTree = {
-        heading,
-        todoState: state === "" ? null : state,
-        preamble,
-        children: [] as OrgTree[]
+      const newTodo: NewTodo = {
+        file,
+        contents: {
+          sectionTodo: state === "" ? null : state,
+          sectionHeading: [{ tag: "Plain", contents: heading }],
+          sectionDoc: {
+            docBlocks: [], // TODO
+            docSections: []
+          },
+          sectionTags: [],
+          sectionProps: {},
+        }
       };
-      database.transaction("todos", "readwrite").objectStore("todos").add(todo);
+      postTodosAdd(
+        newTodo,
+        () => {
+          console.log("Added todo to database:", newTodo);
+        },
+        error => console.log("Error adding todo to database")
+      )
+      // database.transaction("todos", "readwrite").objectStore("todos").add(todo);
       displayToDos(database);
-      console.log("Added todo to database:", todo);
     }
   });
   displayToDos(database);

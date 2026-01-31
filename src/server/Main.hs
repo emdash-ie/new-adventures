@@ -6,11 +6,12 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
-import Prelude hiding (readFile)
+import Prelude hiding (readFile, writeFile)
 import Control.Monad (forever)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), object)
-import Data.ByteString (readFile)
+import Data.ByteString (readFile, writeFile)
+import Data.Foldable (for_)
 import Data.List (isSuffixOf)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
@@ -20,7 +21,7 @@ import Data.Org
 import Data.Traversable (for)
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Text.IO qualified as Text
 import GHC.Conc
 import GHC.Generics
@@ -39,7 +40,7 @@ main = do
       let dir : staticPath : _ = args
       orgFiles <- newTVarIO Map.empty
       _pollerThreadId <- pollFromDisk dir orgFiles
-      run 8014 (app orgFiles staticPath)
+      run 8014 (app orgFiles staticPath dir)
     "generate-api-javascript" -> do
       let targetFile : _ = args
       Text.writeFile targetFile apiJavascript
@@ -52,10 +53,10 @@ type ToDoAPI = "todos" :> (
   )
 type API = ToDoAPI :<|> Raw
 
-todoServer :: TVar (Map Text OrgFile) -> Server ToDoAPI
-todoServer orgFiles =
+todoServer :: FilePath -> TVar (Map Text OrgFile) -> Server ToDoAPI
+todoServer todoDirectory orgFiles =
   readTodos orgFiles
-  :<|> addTodo orgFiles
+  :<|> addTodo todoDirectory orgFiles
 
 readTodos :: TVar (Map Text OrgFile) -> Handler (Map Text OrgFile)
 readTodos orgFiles = do
@@ -69,24 +70,28 @@ data NewTodo = NewTodo
 instance FromJSON NewTodo
 instance ToJSON NewTodo
 
-addTodo :: TVar (Map Text OrgFile) -> NewTodo -> Handler ()
-addTodo orgFiles NewTodo{file, contents} = do
-  liftIO (atomically do
-    fs <- readTVar orgFiles
-    let update = \case
-          Nothing -> Just (OrgFile {
-                              orgMeta = Map.empty,
-                              orgDoc = OrgDoc {
-                                  docBlocks = [],
-                                  docSections = [contents]
-                                }
-                           })
-          Just OrgFile{orgMeta, orgDoc = OrgDoc{docBlocks, docSections}} ->
-            Just OrgFile{orgMeta, orgDoc = OrgDoc{docBlocks, docSections = docSections <> [contents]}}
-    writeTVar orgFiles (Map.alter update file fs))
+addTodo :: FilePath -> TVar (Map Text OrgFile) -> NewTodo -> Handler ()
+addTodo todoDirectory orgFiles NewTodo{file, contents} = do
+  liftIO do
+    newFiles <- atomically do
+      fs <- readTVar orgFiles
+      let update = \case
+            Nothing -> Just (OrgFile {
+                                orgMeta = Map.empty,
+                                orgDoc = OrgDoc {
+                                    docBlocks = [],
+                                    docSections = [contents]
+                                  }
+                             })
+            Just OrgFile{orgMeta, orgDoc = OrgDoc{docBlocks, docSections}} ->
+              Just OrgFile{orgMeta, orgDoc = OrgDoc{docBlocks, docSections = docSections <> [contents]}}
+      let newFiles = Map.alter update file fs
+      writeTVar orgFiles newFiles
+      return newFiles
+    writeFilesToDisk todoDirectory newFiles
 
-server :: TVar (Map Text OrgFile) -> FilePath -> Server API
-server files staticPath = todoServer files :<|> serveDirectoryFileServer staticPath
+server :: TVar (Map Text OrgFile) -> FilePath -> FilePath -> Server API
+server files staticPath todoDirectory = todoServer todoDirectory files :<|> serveDirectoryFileServer staticPath
 
 todoAPI :: Proxy ToDoAPI
 todoAPI = Proxy
@@ -94,8 +99,8 @@ todoAPI = Proxy
 api :: Proxy API
 api = Proxy
 
-app :: TVar (Map Text OrgFile) -> FilePath -> Application
-app files staticPath = serve api (server files staticPath)
+app :: TVar (Map Text OrgFile) -> FilePath -> FilePath -> Application
+app files staticPath todoDirectory = serve api (server files staticPath todoDirectory)
 
 pollFromDisk :: FilePath -> TVar (Map Text OrgFile) -> IO ThreadId
 pollFromDisk dir orgFiles = forkIO $ forever $ do
@@ -110,6 +115,11 @@ readFilesFromDisk dir = do
   fmap (Map.fromList . catMaybes) $ for orgFilePaths \f -> do
     bs <- readFile (dir </> f)
     return (fmap (Text.pack f,) (org (decodeUtf8 bs)))
+
+writeFilesToDisk :: FilePath -> Map Text OrgFile -> IO ()
+writeFilesToDisk dir files =
+  for_ (Map.toList files) \(f, org) ->
+    writeFile (dir </> Text.unpack f) (encodeUtf8 (prettyOrgFile org))
 
 apiJavascript :: Text
 apiJavascript = jsForAPI todoAPI vanillaJS
